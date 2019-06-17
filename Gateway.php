@@ -1,6 +1,9 @@
 <?php
+
 namespace GatewayClient;
+
 use \Exception;
+
 /**
  * This file is part of workerman.
  *
@@ -55,14 +58,16 @@ class Gateway
      * @var bool
      */
     public static $persistentConnection = false;
-    
+
+    public static $disableCache = true;
+
     /**
      * 向所有客户端连接(或者 client_id_array 指定的客户端连接)广播消息
      *
-     * @param string $message           向客户端发送的消息
-     * @param array  $client_id_array   客户端 id 数组
-     * @param array  $exclude_client_id 不给这些client_id发
-     * @param bool   $raw               是否发送原始数据（即不调用gateway的协议的encode方法）
+     * @param string $message 向客户端发送的消息
+     * @param array $client_id_array 客户端 id 数组
+     * @param array $exclude_client_id 不给这些client_id发
+     * @param bool $raw 是否发送原始数据（即不调用gateway的协议的encode方法）
      * @return void
      * @throws Exception
      */
@@ -77,7 +82,7 @@ class Gateway
 
         if ($exclude_client_id) {
             if (!is_array($exclude_client_id)) {
-                $exclude_client_id = array($exclude_client_id);
+                $exclude_client_id = [$exclude_client_id];
             }
             if ($client_id_array) {
                 $exclude_client_id = array_flip($exclude_client_id);
@@ -86,10 +91,10 @@ class Gateway
 
         if ($client_id_array) {
             if (!is_array($client_id_array)) {
-                echo new \Exception('bad $client_id_array:'.var_export($client_id_array, true));
+                echo new \Exception('bad $client_id_array:' . var_export($client_id_array, true));
                 return;
             }
-            $data_array = array();
+            $data_array = [];
             foreach ($client_id_array as $client_id) {
                 if (isset($exclude_client_id[$client_id])) {
                     continue;
@@ -102,7 +107,7 @@ class Gateway
             }
             foreach ($data_array as $addr => $connection_id_list) {
                 $the_gateway_data             = $gateway_data;
-                $the_gateway_data['ext_data'] = json_encode(array('connections' => $connection_id_list));
+                $the_gateway_data['ext_data'] = json_encode(['connections' => $connection_id_list]);
                 static::sendToGateway($addr, $the_gateway_data);
             }
             return;
@@ -120,7 +125,7 @@ class Gateway
         if (static::$businessWorker) {
             foreach (static::$businessWorker->gatewayConnections as $address => $gateway_connection) {
                 $gateway_data['ext_data'] = isset($address_connection_array[$address]) ?
-                    json_encode(array('exclude'=> $address_connection_array[$address])) : '';
+                    json_encode(['exclude' => $address_connection_array[$address]]) : '';
                 /** @var TcpConnection $gateway_connection */
                 $gateway_connection->send($gateway_data);
             }
@@ -129,7 +134,7 @@ class Gateway
             $all_addresses = static::getAllGatewayAddressesFromRegister();
             foreach ($all_addresses as $address) {
                 $gateway_data['ext_data'] = isset($address_connection_array[$address]) ?
-                    json_encode(array('exclude'=> $address_connection_array[$address])) : '';
+                    json_encode(['exclude' => $address_connection_array[$address]]) : '';
                 static::sendToGateway($address, $gateway_data);
             }
         }
@@ -139,7 +144,7 @@ class Gateway
     /**
      * 向某个client_id对应的连接发消息
      *
-     * @param int    $client_id
+     * @param int $client_id
      * @param string $message
      * @return void
      */
@@ -158,7 +163,7 @@ class Gateway
     {
         return (int)static::getClientIdByUid($uid);
     }
-    
+
     /**
      * 判断client_id对应的连接是否在线
      *
@@ -171,7 +176,7 @@ class Gateway
         if (!$address_data) {
             return 0;
         }
-        $address      = long2ip($address_data['local_ip']) . ":{$address_data['local_port']}";
+        $address = long2ip($address_data['local_ip']) . ":{$address_data['local_port']}";
         if (isset(static::$businessWorker)) {
             if (!isset(static::$businessWorker->gatewayConnections[$address])) {
                 return 0;
@@ -205,12 +210,12 @@ class Gateway
     {
         $gateway_data = GatewayProtocol::$empty;
         if (!$group) {
-            $gateway_data['cmd']      = GatewayProtocol::CMD_GET_ALL_CLIENT_SESSIONS;
+            $gateway_data['cmd'] = GatewayProtocol::CMD_GET_ALL_CLIENT_SESSIONS;
         } else {
             $gateway_data['cmd']      = GatewayProtocol::CMD_GET_CLIENT_SESSIONS_BY_GROUP;
             $gateway_data['ext_data'] = $group;
         }
-        $status_data      = array();
+        $status_data      = [];
         $all_buffer_array = static::getBufferFromAllGateway($gateway_data);
         foreach ($all_buffer_array as $local_ip => $buffer_array) {
             foreach ($buffer_array as $local_port => $data) {
@@ -220,7 +225,7 @@ class Gateway
                         if ($client_id === Context::$client_id) {
                             $status_data[$client_id] = (array)$_SESSION;
                         } else {
-                            $status_data[$client_id] = $session_buffer ? Context::sessionDecode($session_buffer) : array();
+                            $status_data[$client_id] = $session_buffer ? Context::sessionDecode($session_buffer) : [];
                         }
                     }
                 }
@@ -253,7 +258,7 @@ class Gateway
         if (static::isValidGroupId($group)) {
             return static::getAllClientSessions($group);
         }
-        return array();
+        return [];
     }
 
     /**
@@ -319,16 +324,16 @@ class Gateway
     public static function getClientIdListByGroup($group)
     {
         if (!static::isValidGroupId($group)) {
-            return array();
+            return [];
         }
 
-        $data = static::select(array('uid'), array('groups' => is_array($group) ? $group : array($group)));
-        $client_id_map = array();
+        $data          = static::select(['uid'], ['groups' => is_array($group) ? $group : [$group]]);
+        $client_id_map = [];
         foreach ($data as $local_ip => $buffer_array) {
             foreach ($buffer_array as $local_port => $items) {
                 //$items = ['connection_id'=>['uid'=>x, 'group'=>[x,x..], 'session'=>[..]], 'client_id'=>[..], ..];
                 foreach ($items as $connection_id => $info) {
-                    $client_id = Context::addressToClientId($local_ip, $local_port, $connection_id);
+                    $client_id                 = Context::addressToClientId($local_ip, $local_port, $connection_id);
                     $client_id_map[$client_id] = $client_id;
                 }
             }
@@ -343,7 +348,7 @@ class Gateway
      */
     public static function getAllClientIdList()
     {
-        return static::formatClientIdFromGatewayBuffer(static::select(array('uid')));
+        return static::formatClientIdFromGatewayBuffer(static::select(['uid']));
     }
 
     /**
@@ -354,12 +359,12 @@ class Gateway
      */
     protected static function formatClientIdFromGatewayBuffer($data)
     {
-        $client_id_list = array();
+        $client_id_list = [];
         foreach ($data as $local_ip => $buffer_array) {
             foreach ($buffer_array as $local_port => $items) {
                 //$items = ['connection_id'=>['uid'=>x, 'group'=>[x,x..], 'session'=>[..]], 'client_id'=>[..], ..];
                 foreach ($items as $connection_id => $info) {
-                    $client_id = Context::addressToClientId($local_ip, $local_port, $connection_id);
+                    $client_id                  = Context::addressToClientId($local_ip, $local_port, $connection_id);
                     $client_id_list[$client_id] = $client_id;
                 }
             }
@@ -379,7 +384,7 @@ class Gateway
         $gateway_data             = GatewayProtocol::$empty;
         $gateway_data['cmd']      = GatewayProtocol::CMD_GET_CLIENT_ID_BY_UID;
         $gateway_data['ext_data'] = $uid;
-        $client_list              = array();
+        $client_list              = [];
         $all_buffer_array         = static::getBufferFromAllGateway($gateway_data);
         foreach ($all_buffer_array as $local_ip => $buffer_array) {
             foreach ($buffer_array as $local_port => $connection_id_array) {
@@ -402,12 +407,12 @@ class Gateway
     public static function getUidListByGroup($group)
     {
         if (!static::isValidGroupId($group)) {
-            return array();
+            return [];
         }
 
-        $group = is_array($group) ? $group : array($group);
-        $data = static::select(array('uid'), array('groups' => $group));
-        $uid_map = array();
+        $group   = is_array($group) ? $group : [$group];
+        $data    = static::select(['uid'], ['groups' => $group]);
+        $uid_map = [];
         foreach ($data as $local_ip => $buffer_array) {
             foreach ($buffer_array as $local_port => $items) {
                 //$items = ['connection_id'=>['uid'=>x, 'group'=>[x,x..], 'session'=>[..]], 'client_id'=>[..], ..];
@@ -442,8 +447,8 @@ class Gateway
      */
     public static function getAllUidList()
     {
-        $data = static::select(array('uid'));
-        $uid_map = array();
+        $data    = static::select(['uid']);
+        $uid_map = [];
         foreach ($data as $local_ip => $buffer_array) {
             foreach ($buffer_array as $local_port => $items) {
                 //$items = ['connection_id'=>['uid'=>x, 'group'=>[x,x..], 'session'=>[..]], 'client_id'=>[..], ..];
@@ -474,7 +479,7 @@ class Gateway
      */
     public static function getUidByClientId($client_id)
     {
-        $data = static::select(array('uid'), array('client_id'=>array($client_id)));
+        $data = static::select(['uid'], ['client_id' => [$client_id]]);
         foreach ($data as $local_ip => $buffer_array) {
             foreach ($buffer_array as $local_port => $items) {
                 //$items = ['connection_id'=>['uid'=>x, 'group'=>[x,x..], 'session'=>[..]], 'client_id'=>[..], ..];
@@ -492,10 +497,10 @@ class Gateway
      */
     public static function getAllGroupIdList()
     {
-        $gateway_data             = GatewayProtocol::$empty;
-        $gateway_data['cmd']      = GatewayProtocol::CMD_GET_GROUP_ID_LIST;
-        $group_id_list            = array();
-        $all_buffer_array         = static::getBufferFromAllGateway($gateway_data);
+        $gateway_data        = GatewayProtocol::$empty;
+        $gateway_data['cmd'] = GatewayProtocol::CMD_GET_GROUP_ID_LIST;
+        $group_id_list       = [];
+        $all_buffer_array    = static::getBufferFromAllGateway($gateway_data);
         foreach ($all_buffer_array as $local_ip => $buffer_array) {
             foreach ($buffer_array as $local_port => $group_id_array) {
                 if (is_array($group_id_array)) {
@@ -518,14 +523,13 @@ class Gateway
      */
     public static function getAllGroupUidCount()
     {
-        $group_uid_map = static::getAllGroupUidList();
-        $group_uid_count_map = array();
+        $group_uid_map       = static::getAllGroupUidList();
+        $group_uid_count_map = [];
         foreach ($group_uid_map as $group_id => $uid_list) {
             $group_uid_count_map[$group_id] = count($uid_list);
         }
         return $group_uid_count_map;
     }
-
 
 
     /**
@@ -535,8 +539,8 @@ class Gateway
      */
     public static function getAllGroupUidList()
     {
-        $data = static::select(array('uid','groups'));
-        $group_uid_map = array();
+        $data          = static::select(['uid', 'groups']);
+        $group_uid_map = [];
         foreach ($data as $local_ip => $buffer_array) {
             foreach ($buffer_array as $local_port => $items) {
                 //$items = ['connection_id'=>['uid'=>x, 'group'=>[x,x..], 'session'=>[..]], 'client_id'=>[..], ..];
@@ -546,8 +550,8 @@ class Gateway
                     }
                     $uid = $info['uid'];
                     foreach ($info['groups'] as $group_id) {
-                        if(!isset($group_uid_map[$group_id])) {
-                            $group_uid_map[$group_id] = array();
+                        if (!isset($group_uid_map[$group_id])) {
+                            $group_uid_map[$group_id] = [];
                         }
                         $group_uid_map[$group_id][$uid] = $uid;
                     }
@@ -564,8 +568,8 @@ class Gateway
      */
     public static function getAllGroupClientIdList()
     {
-        $data = static::select(array('groups'));
-        $group_client_id_map = array();
+        $data                = static::select(['groups']);
+        $group_client_id_map = [];
         foreach ($data as $local_ip => $buffer_array) {
             foreach ($buffer_array as $local_port => $items) {
                 //$items = ['connection_id'=>['uid'=>x, 'group'=>[x,x..], 'session'=>[..]], 'client_id'=>[..], ..];
@@ -575,8 +579,8 @@ class Gateway
                     }
                     $client_id = Context::addressToClientId($local_ip, $local_port, $connection_id);
                     foreach ($info['groups'] as $group_id) {
-                        if(!isset($group_client_id_map[$group_id])) {
-                            $group_client_id_map[$group_id] = array();
+                        if (!isset($group_client_id_map[$group_id])) {
+                            $group_client_id_map[$group_id] = [];
                         }
                         $group_client_id_map[$group_id][$client_id] = $client_id;
                     }
@@ -593,8 +597,8 @@ class Gateway
      */
     public static function getAllGroupClientIdCount()
     {
-        $group_client_map = static::getAllGroupClientIdList();
-        $group_client_count_map = array();
+        $group_client_map       = static::getAllGroupClientIdList();
+        $group_client_count_map = [];
         foreach ($group_client_map as $group_id => $client_id_list) {
             $group_client_count_map[$group_id] = count($client_id_list);
         }
@@ -609,18 +613,18 @@ class Gateway
      * @param array $where
      * @return array
      */
-    protected static function select($fields = array('session','uid','groups'), $where = array())
+    protected static function select($fields = ['session', 'uid', 'groups'], $where = [])
     {
-        $t = microtime(true);
+        $t                        = microtime(true);
         $gateway_data             = GatewayProtocol::$empty;
         $gateway_data['cmd']      = GatewayProtocol::CMD_SELECT;
-        $gateway_data['ext_data'] = array('fields' => $fields, 'where' => $where);
-        $gateway_data_list   = array();
+        $gateway_data['ext_data'] = ['fields' => $fields, 'where' => $where];
+        $gateway_data_list        = [];
         // 有client_id，能计算出需要和哪些gateway通讯，只和必要的gateway通讯能降低系统负载
         if (isset($where['client_id'])) {
             $client_id_list = $where['client_id'];
             unset($gateway_data['ext_data']['where']['client_id']);
-            $gateway_data['ext_data']['where']['connection_id'] = array();
+            $gateway_data['ext_data']['where']['connection_id'] = [];
             foreach ($client_id_list as $client_id) {
                 $address_data = Context::clientIdToAddress($client_id);
                 if (!$address_data) {
@@ -647,7 +651,7 @@ class Gateway
             $data = static::getBufferFromSomeGateway($gateway_data_list);
         } else {
             $gateway_data['ext_data'] = json_encode($gateway_data['ext_data']);
-            $data = static::getBufferFromAllGateway($gateway_data);
+            $data                     = static::getBufferFromAllGateway($gateway_data);
         }
 
         return $data;
@@ -655,16 +659,16 @@ class Gateway
 
     /**
      * 生成验证包，用于验证此客户端的合法性
-     * 
+     *
      * @return string
      */
     protected static function generateAuthBuffer()
     {
         $gateway_data         = GatewayProtocol::$empty;
         $gateway_data['cmd']  = GatewayProtocol::CMD_GATEWAY_CLIENT_CONNECT;
-        $gateway_data['body'] = json_encode(array(
+        $gateway_data['body'] = json_encode([
             'secret_key' => static::$secretKey,
-        ));
+        ]);
         return GatewayProtocol::encode($gateway_data);
     }
 
@@ -677,11 +681,11 @@ class Gateway
      */
     protected static function getBufferFromSomeGateway($gateway_data_array)
     {
-        $gateway_buffer_array = array();
-        $auth_buffer = static::$secretKey ? static::generateAuthBuffer() : '';
+        $gateway_buffer_array = [];
+        $auth_buffer          = static::$secretKey ? static::generateAuthBuffer() : '';
         foreach ($gateway_data_array as $address => $gateway_data) {
             if ($auth_buffer) {
-                $gateway_buffer_array[$address] = $auth_buffer.GatewayProtocol::encode($gateway_data);
+                $gateway_buffer_array[$address] = $auth_buffer . GatewayProtocol::encode($gateway_data);
             } else {
                 $gateway_buffer_array[$address] = GatewayProtocol::encode($gateway_data);
             }
@@ -698,10 +702,10 @@ class Gateway
      */
     protected static function getBufferFromAllGateway($gateway_data)
     {
-        $addresses = static::getAllGatewayAddress();
-        $gateway_buffer_array = array();
-        $gateway_buffer = GatewayProtocol::encode($gateway_data);
-        $gateway_buffer = static::$secretKey ? static::generateAuthBuffer() . $gateway_buffer : $gateway_buffer;
+        $addresses            = static::getAllGatewayAddress();
+        $gateway_buffer_array = [];
+        $gateway_buffer       = GatewayProtocol::encode($gateway_data);
+        $gateway_buffer       = static::$secretKey ? static::generateAuthBuffer() . $gateway_buffer : $gateway_buffer;
         foreach ($addresses as $address) {
             $gateway_buffer_array[$address] = $gateway_buffer;
         }
@@ -725,7 +729,7 @@ class Gateway
         } else {
             $addresses = static::getAllGatewayAddressesFromRegister();
             if (empty($addresses)) {
-                return array();
+                return [];
             }
         }
         return $addresses;
@@ -738,7 +742,7 @@ class Gateway
      */
     protected static function getBufferFromGateway($gateway_buffer_array)
     {
-        $client_array = $status_data = $client_address_map = $receive_buffer_array = $recv_length_array = array();
+        $client_array = $status_data = $client_address_map = $receive_buffer_array = $recv_length_array = [];
         // 批量向所有gateway进程发送请求数据
         foreach ($gateway_buffer_array as $address => $gateway_buffer) {
             $client = stream_socket_client("tcp://$address", $errno, $errmsg, static::$connectTimeout);
@@ -754,7 +758,7 @@ class Gateway
         $time_start = microtime(true);
         // 批量接收请求
         while (count($client_array) > 0) {
-            $write = $except = array();
+            $write = $except = [];
             $read  = $client_array;
             if (@stream_select($read, $write, $except, $timeout)) {
                 foreach ($read as $client) {
@@ -762,7 +766,7 @@ class Gateway
                     $buffer    = stream_socket_recvfrom($client, 65535);
                     if ($buffer !== '' && $buffer !== false) {
                         $receive_buffer_array[$socket_id] .= $buffer;
-                        $receive_length = strlen($receive_buffer_array[$socket_id]);
+                        $receive_length                   = strlen($receive_buffer_array[$socket_id]);
                         if (empty($recv_length_array[$socket_id]) && $receive_length >= 4) {
                             $recv_length_array[$socket_id] = current(unpack('N', $receive_buffer_array[$socket_id]));
                         }
@@ -778,7 +782,7 @@ class Gateway
                 break;
             }
         }
-        $format_buffer_array = array();
+        $format_buffer_array = [];
         foreach ($receive_buffer_array as $socket_id => $buffer) {
             $local_ip                                    = ip2long($client_address_map[$socket_id][0]);
             $local_port                                  = $client_address_map[$socket_id][1];
@@ -804,7 +808,7 @@ class Gateway
             if (!$address_data) {
                 return false;
             }
-            $address      = long2ip($address_data['local_ip']) . ":{$address_data['local_port']}";
+            $address = long2ip($address_data['local_ip']) . ":{$address_data['local_port']}";
             return static::kickAddress($address, $address_data['connection_id'], $message);
         }
     }
@@ -848,7 +852,7 @@ class Gateway
     /**
      * 将 client_id 与 uid 绑定
      *
-     * @param int        $client_id
+     * @param int $client_id
      * @param int|string $uid
      * @return void
      */
@@ -860,7 +864,7 @@ class Gateway
     /**
      * 将 client_id 与 uid 解除绑定
      *
-     * @param int        $client_id
+     * @param int $client_id
      * @param int|string $uid
      * @return void
      */
@@ -872,7 +876,7 @@ class Gateway
     /**
      * 将 client_id 加入组
      *
-     * @param int        $client_id
+     * @param int $client_id
      * @param int|string $group
      * @return void
      */
@@ -885,7 +889,7 @@ class Gateway
     /**
      * 将 client_id 离开组
      *
-     * @param int        $client_id
+     * @param int $client_id
      * @param int|string $group
      *
      * @return void
@@ -918,7 +922,7 @@ class Gateway
      * 向所有 uid 发送
      *
      * @param int|string|array $uid
-     * @param string           $message
+     * @param string $message
      *
      * @return void
      */
@@ -929,7 +933,7 @@ class Gateway
         $gateway_data['body'] = $message;
 
         if (!is_array($uid)) {
-            $uid = array($uid);
+            $uid = [$uid];
         }
 
         $gateway_data['ext_data'] = json_encode($uid);
@@ -940,10 +944,10 @@ class Gateway
     /**
      * 向 group 发送
      *
-     * @param int|string|array $group             组（不允许是 0 '0' false null array()等为空的值）
-     * @param string           $message           消息
-     * @param array            $exclude_client_id 不给这些client_id发
-     * @param bool             $raw               发送原始数据（即不调用gateway的协议的encode方法）
+     * @param int|string|array $group 组（不允许是 0 '0' false null array()等为空的值）
+     * @param string $message 消息
+     * @param array $exclude_client_id 不给这些client_id发
+     * @param bool $raw 发送原始数据（即不调用gateway的协议的encode方法）
      *
      * @return void
      */
@@ -960,11 +964,11 @@ class Gateway
         }
 
         if (!is_array($group)) {
-            $group = array($group);
+            $group = [$group];
         }
 
         // 分组发送，没有排除的client_id，直接发送
-        $default_ext_data_buffer = json_encode(array('group'=> $group, 'exclude'=> null));
+        $default_ext_data_buffer = json_encode(['group' => $group, 'exclude' => null]);
         if (empty($exclude_client_id)) {
             $gateway_data['ext_data'] = $default_ext_data_buffer;
             return static::sendToAllGateway($gateway_data);
@@ -972,7 +976,7 @@ class Gateway
 
         // 分组发送，有排除的client_id，需要将client_id转换成对应gateway进程内的connectionId
         if (!is_array($exclude_client_id)) {
-            $exclude_client_id = array($exclude_client_id);
+            $exclude_client_id = [$exclude_client_id];
         }
 
         $address_connection_array = static::clientIdArrayToAddressArray($exclude_client_id);
@@ -980,7 +984,7 @@ class Gateway
         if (static::$businessWorker) {
             foreach (static::$businessWorker->gatewayConnections as $address => $gateway_connection) {
                 $gateway_data['ext_data'] = isset($address_connection_array[$address]) ?
-                    json_encode(array('group'=> $group, 'exclude'=> $address_connection_array[$address])) :
+                    json_encode(['group' => $group, 'exclude' => $address_connection_array[$address]]) :
                     $default_ext_data_buffer;
                 /** @var TcpConnection $gateway_connection */
                 $gateway_connection->send($gateway_data);
@@ -990,7 +994,7 @@ class Gateway
             $addresses = static::getAllGatewayAddressesFromRegister();
             foreach ($addresses as $address) {
                 $gateway_data['ext_data'] = isset($address_connection_array[$address]) ?
-                    json_encode(array('group'=> $group, 'exclude'=> $address_connection_array[$address])) :
+                    json_encode(['group' => $group, 'exclude' => $address_connection_array[$address]]) :
                     $default_ext_data_buffer;
                 static::sendToGateway($address, $gateway_data);
             }
@@ -1000,7 +1004,7 @@ class Gateway
     /**
      * 更新 session，框架自动调用，开发者不要调用
      *
-     * @param int    $client_id
+     * @param int $client_id
      * @param string $session_str
      * @return bool
      */
@@ -1012,7 +1016,7 @@ class Gateway
     /**
      * 设置 session，原session值会被覆盖
      *
-     * @param int   $client_id
+     * @param int $client_id
      * @param array $session
      *
      * @return void
@@ -1020,16 +1024,16 @@ class Gateway
     public static function setSession($client_id, array $session)
     {
         if (Context::$client_id === $client_id) {
-            $_SESSION = $session;
+            $_SESSION             = $session;
             Context::$old_session = $_SESSION;
         }
         static::setSocketSession($client_id, Context::sessionEncode($session));
     }
-    
+
     /**
      * 更新 session，实际上是与老的session合并
      *
-     * @param int   $client_id
+     * @param int $client_id
      * @param array $session
      *
      * @return void
@@ -1037,17 +1041,17 @@ class Gateway
     public static function updateSession($client_id, array $session)
     {
         if (Context::$client_id === $client_id) {
-            $_SESSION = array_replace_recursive((array)$_SESSION, $session);
+            $_SESSION             = array_replace_recursive((array)$_SESSION, $session);
             Context::$old_session = $_SESSION;
         }
         static::sendCmdAndMessageToClient($client_id, GatewayProtocol::CMD_UPDATE_SESSION, '', Context::sessionEncode($session));
     }
-    
+
     /**
      * 获取某个client_id的session
      *
-     * @param int   $client_id
-     * @return mixed false表示出错、null表示用户不存在、array表示具体的session信息 
+     * @param int $client_id
+     * @return mixed false表示出错、null表示用户不存在、array表示具体的session信息
      */
     public static function getSession($client_id)
     {
@@ -1055,7 +1059,7 @@ class Gateway
         if (!$address_data) {
             return false;
         }
-        $address      = long2ip($address_data['local_ip']) . ":{$address_data['local_port']}";
+        $address = long2ip($address_data['local_ip']) . ":{$address_data['local_port']}";
         if (isset(static::$businessWorker)) {
             if (!isset(static::$businessWorker->gatewayConnections[$address])) {
                 return null;
@@ -1070,8 +1074,8 @@ class Gateway
     /**
      * 向某个用户网关发送命令和消息
      *
-     * @param int    $client_id
-     * @param int    $cmd
+     * @param int $client_id
+     * @param int $cmd
      * @param string $message
      * @param string $ext_data
      * @return boolean
@@ -1083,7 +1087,7 @@ class Gateway
             $address       = long2ip(Context::$local_ip) . ':' . Context::$local_port;
             $connection_id = Context::$connection_id;
         } else {
-            $address_data  = Context::clientIdToAddress($client_id);
+            $address_data = Context::clientIdToAddress($client_id);
             if (!$address_data) {
                 return false;
             }
@@ -1104,7 +1108,7 @@ class Gateway
     /**
      * 发送数据并返回
      *
-     * @param int   $address
+     * @param int $address
      * @param mixed $data
      * @return bool
      * @throws Exception
@@ -1125,7 +1129,7 @@ class Gateway
             stream_set_timeout($client, 1);
             $all_buffer = '';
             $time_start = microtime(true);
-            $pack_len = 0;
+            $pack_len   = 0;
             while (1) {
                 $buf = stream_socket_recvfrom($client, 655350);
                 if ($buf !== '' && $buf !== false) {
@@ -1140,7 +1144,7 @@ class Gateway
                 }
                 $recv_len = strlen($all_buffer);
                 if (!$pack_len && $recv_len >= 4) {
-                    $pack_len= current(unpack('N', $all_buffer));
+                    $pack_len = current(unpack('N', $all_buffer));
                 }
                 // 回复的数据都是以\n结尾
                 if (($pack_len && $recv_len >= $pack_len + 4) || microtime(true) - $time_start > $timeout) {
@@ -1158,7 +1162,7 @@ class Gateway
      * 发送数据到网关
      *
      * @param string $address
-     * @param array  $gateway_data
+     * @param array $gateway_data
      * @return bool
      */
     protected static function sendToGateway($address, $gateway_data)
@@ -1218,7 +1222,7 @@ class Gateway
      * 踢掉某个网关的 socket
      *
      * @param string $address
-     * @param int    $connection_id
+     * @param int $connection_id
      * @return bool
      */
     protected static function kickAddress($address, $connection_id, $message)
@@ -1226,7 +1230,7 @@ class Gateway
         $gateway_data                  = GatewayProtocol::$empty;
         $gateway_data['cmd']           = GatewayProtocol::CMD_KICK;
         $gateway_data['connection_id'] = $connection_id;
-        $gateway_data['body'] = $message;
+        $gateway_data['body']          = $message;
         return static::sendToGateway($address, $gateway_data);
     }
 
@@ -1234,7 +1238,7 @@ class Gateway
      * 销毁某个网关的 socket
      *
      * @param string $address
-     * @param int    $connection_id
+     * @param int $connection_id
      * @return bool
      */
     protected static function destroyAddress($address, $connection_id)
@@ -1253,7 +1257,7 @@ class Gateway
      */
     protected static function clientIdArrayToAddressArray(array $client_id_array)
     {
-        $address_connection_array = array();
+        $address_connection_array = [];
         foreach ($client_id_array as $client_id) {
             $address_data = Context::clientIdToAddress($client_id);
             if ($address_data) {
@@ -1284,13 +1288,13 @@ class Gateway
     protected static function getAllGatewayAddressesFromRegister()
     {
         static $addresses_cache, $last_update;
-        $time_now = time();
-        $expiration_time = 1;
+        $time_now           = time();
+        $expiration_time    = 1;
         $register_addresses = (array)static::$registerAddress;
-        $client = null;
-        if(empty($addresses_cache) || $time_now - $last_update > $expiration_time) {
+        if (self::$disableCache || (empty($addresses_cache) || $time_now - $last_update > $expiration_time)) {
             foreach ($register_addresses as $register_address) {
-                set_error_handler(function(){});
+                set_error_handler(function () {
+                });
                 $client = stream_socket_client('tcp://' . $register_address, $errno, $errmsg, static::$connectTimeout);
                 restore_error_handler();
                 if ($client) {
@@ -1308,7 +1312,7 @@ class Gateway
                 throw new Exception('getAllGatewayAddressesFromRegister fail. tcp://' .
                     $register_address . ' return ' . var_export($ret, true));
             }
-            $last_update = $time_now;
+            $last_update     = $time_now;
             $addresses_cache = $data['addresses'];
         }
         if (!$addresses_cache) {
@@ -1327,7 +1331,7 @@ class Gateway
     protected static function isValidGroupId($group)
     {
         if (empty($group)) {
-            echo new \Exception('group('.var_export($group, true).') empty');
+            echo new \Exception('group(' . var_export($group, true) . ') empty');
             return false;
         }
         return true;
@@ -1385,8 +1389,7 @@ class Context
      */
     public static function sessionEncode($session_data = '')
     {
-        if($session_data !== '')
-        {
+        if ($session_data !== '') {
             return serialize($session_data);
         }
         return '';
@@ -1409,7 +1412,7 @@ class Context
     public static function clear()
     {
         static::$local_ip = static::$local_port = static::$client_ip = static::$client_port =
-        static::$client_id = static::$connection_id  = static::$old_session = null;
+        static::$client_id = static::$connection_id = static::$old_session = null;
     }
 
     /**
@@ -1427,11 +1430,10 @@ class Context
      */
     public static function clientIdToAddress($client_id)
     {
-        if(strlen($client_id) !== 20)
-        {
+        if (strlen($client_id) !== 20) {
             throw new \Exception("client_id $client_id is invalid");
         }
-        return unpack('Nlocal_ip/nlocal_port/Nconnection_id' ,pack('H*', $client_id));
+        return unpack('Nlocal_ip/nlocal_port/Nconnection_id', pack('H*', $client_id));
     }
 
 }
@@ -1527,7 +1529,7 @@ class GatewayProtocol
      * @var int
      */
     const HEAD_LEN = 28;
-    public static $empty = array(
+    public static $empty = [
         'cmd'           => 0,
         'local_ip'      => 0,
         'local_port'    => 0,
@@ -1538,7 +1540,8 @@ class GatewayProtocol
         'gateway_port'  => 0,
         'ext_data'      => '',
         'body'          => '',
-    );
+    ];
+
     /**
      * 返回包长度
      *
@@ -1553,6 +1556,7 @@ class GatewayProtocol
         $data = unpack("Npack_len", $buffer);
         return $data['pack_len'];
     }
+
     /**
      * 获取整个包的 buffer
      *
@@ -1575,6 +1579,7 @@ class GatewayProtocol
                 $data['flag'], $data['gateway_port'],
                 $ext_len) . $data['ext_data'] . $data['body'];
     }
+
     /**
      * 从二进制数据转换为数组
      *

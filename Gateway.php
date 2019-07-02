@@ -1,6 +1,6 @@
 <?php
 
-namespace GatewayClient;
+namespace Aoxiang\GatewayClient;
 
 use \Exception;
 
